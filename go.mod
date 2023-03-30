@@ -1,4 +1,4 @@
-module github.com/edofic/openai-cli
+module github.com/edofic/chatgpt-cli
 
 go 1.19
 

@@ -34,7 +34,7 @@ func main() {
 
 	var req openai.ChatCompletionRequest
 	if *continueSession {
-		session, err := os.ReadFile("/tmp/openai-cli-last-session.json")
+		session, err := os.ReadFile("/tmp/chatgpt-cli-last-session.json")
 		if err != nil {
 			panic(err)
 		}
@@ -101,5 +101,5 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	os.WriteFile("/tmp/openai-cli-last-session.json", resJson, 0644)
+	os.WriteFile("/tmp/chatgpt-cli-last-session.json", resJson, 0644)
 }
