@@ -47,7 +47,6 @@ func main() {
 		if *systemMsg != "" {
 			msgs = append(msgs, openai.ChatCompletionMessage{Role: openai.ChatMessageRoleSystem, Content: *systemMsg})
 		}
-		msgs = append(msgs, openai.ChatCompletionMessage{Role: openai.ChatMessageRoleUser, Content: msg})
 		req = openai.ChatCompletionRequest{
 			Model:       openai.GPT3Dot5Turbo,
 			MaxTokens:   *maxTokens,
@@ -56,6 +55,7 @@ func main() {
 			Messages:    msgs,
 		}
 	}
+	req.Messages = append(req.Messages, openai.ChatCompletionMessage{Role: openai.ChatMessageRoleUser, Content: msg})
 	if *includeFile != "" {
 		contents, err := os.ReadFile(*includeFile)
 		if err != nil {
