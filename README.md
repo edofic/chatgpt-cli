@@ -1,5 +1,7 @@
 # ChatGPT CLI
 
+[![main](https://github.com/edofic/chatgpt-cli/actions/workflows/main.yml/badge.svg)](https://github.com/edofic/chatgpt-cli/actions/workflows/main.yml)
+
 This is a command line client for using ChatGPT. You can easily ask questions (responses are streamed in real time), tweak system prompt (or other params), include local files, pipe the response and ask follow up questions. 
 
 ## Instalation
