@@ -25,7 +25,11 @@ func main() {
 		flag.PrintDefaults()
 	}
 	flag.Parse()
-	msg := strings.Join(flag.Args(), " ")
+	msg := strings.TrimSpace(strings.Join(flag.Args(), " "))
+	if msg == "" {
+		flag.Usage()
+		return
+	}
 
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	client := openai.NewClient(apiKey)
