@@ -70,3 +70,11 @@ COPY . .
 RUN go build -o myApp .
 CMD ["./myApp"]
 ```
+
+### GPT-4
+
+Currently this tool defaults to `gpt-3.5-turbo`, if you have access to GPT-4 and want to use it you can set an evironment variable just like for the api key 
+
+```sh
+export OPENAI_MODEL=gpt-4
+```

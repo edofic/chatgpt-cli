@@ -15,6 +15,8 @@ import (
 	openai "github.com/sashabaranov/go-openai"
 )
 
+const defaultModel = openai.GPT3Dot5Turbo
+
 func main() {
 	maxTokens := flag.Int("maxTokens", 500, "Maximum number of tokens to generate")
 	systemMsg := flag.String("systemMsg", "", "System message to include with the prompt")
@@ -38,6 +40,10 @@ func main() {
 	}
 
 	apiKey := os.Getenv("OPENAI_API_KEY")
+	model := os.Getenv("OPENAI_MODEL")
+	if model == "" {
+		model = defaultModel
+	}
 	client := openai.NewClient(apiKey)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
@@ -58,7 +64,7 @@ func main() {
 			msgs = append(msgs, openai.ChatCompletionMessage{Role: openai.ChatMessageRoleSystem, Content: *systemMsg})
 		}
 		req = openai.ChatCompletionRequest{
-			Model:       openai.GPT3Dot5Turbo,
+			Model:       model,
 			MaxTokens:   *maxTokens,
 			Temperature: float32(*temperature),
 			Stream:      true,
