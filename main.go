@@ -52,7 +52,7 @@ func main() {
 			msgs = append(msgs, openai.ChatCompletionMessage{Role: openai.ChatMessageRoleSystem, Content: *systemMsg})
 		}
 		req = openai.ChatCompletionRequest{
-			Model:       openai.GPT3Dot5Turbo,
+			Model:       openai.GPT4,
 			MaxTokens:   *maxTokens,
 			Temperature: float32(*temperature),
 			Stream:      true,
