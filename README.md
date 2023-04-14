@@ -78,3 +78,13 @@ Currently this tool defaults to `gpt-3.5-turbo`, if you have access to GPT-4 and
 ```sh
 export OPENAI_MODEL=gpt-4
 ```
+
+
+### Azure OpenAI Service
+
+To use Azure hosted models specify two more environment variables on top of your API key
+
+```sh
+OPENAI_AZURE_ENDPOINT='https://<your subdomain>.openai.azure.com/'
+OPENAI_AZURE_MODEL='<your model deployment name>'
+```
