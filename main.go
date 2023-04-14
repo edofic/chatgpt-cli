@@ -123,7 +123,6 @@ func getClient() *openai.Client {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	url := os.Getenv("OPENAI_AZURE_ENDPOINT")
 	if url != "" {
-		fmt.Println("Using Azure endpoint")
 		deployment := os.Getenv("OPENAI_AZURE_MODEL")
 		config := openai.DefaultAzureConfig(apiKey, url, deployment)
 		return openai.NewClientWithConfig(config)
