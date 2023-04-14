@@ -100,23 +100,26 @@ func getClient() *openai.Client {
 
 func getCompletionRequest(p params, model string) openai.ChatCompletionRequest {
 	if p.continueSession {
-		return loadLastCompletion()
-	} else {
-		return newCompletionRequest(p, model)
+		req := loadLastCompletion()
+		if req != nil {
+			return *req
+		}
+		fmt.Println("WARN: failed to load previous session, starting a new one")
 	}
+	return newCompletionRequest(p, model)
 }
 
-func loadLastCompletion() openai.ChatCompletionRequest {
+func loadLastCompletion() *openai.ChatCompletionRequest {
 	var req openai.ChatCompletionRequest
 	session, err := os.ReadFile(sessionFile)
 	if err != nil {
-		panic(err)
+		return nil
 	}
 	err = json.Unmarshal(session, &req)
 	if err != nil {
-		panic(err)
+		return nil
 	}
-	return req
+	return &req
 }
 
 func saveCompletion(req openai.ChatCompletionRequest) error {
