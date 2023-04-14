@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -29,6 +30,11 @@ func main() {
 	if msg == "" {
 		flag.Usage()
 		return
+	} else if msg == "-" {
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			msg += scanner.Text() + "\n"
+		}
 	}
 
 	apiKey := os.Getenv("OPENAI_API_KEY")
