@@ -39,12 +39,11 @@ func main() {
 		}
 	}
 
-	apiKey := os.Getenv("OPENAI_API_KEY")
+	client := getClient()
 	model := os.Getenv("OPENAI_MODEL")
 	if model == "" {
 		model = defaultModel
 	}
-	client := openai.NewClient(apiKey)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
@@ -118,4 +117,16 @@ func main() {
 		panic(err)
 	}
 	os.WriteFile("/tmp/chatgpt-cli-last-session.json", resJson, 0644)
+}
+
+func getClient() *openai.Client {
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	url := os.Getenv("OPENAI_AZURE_ENDPOINT")
+	if url != "" {
+		fmt.Println("Using Azure endpoint")
+		deployment := os.Getenv("OPENAI_AZURE_MODEL")
+		config := openai.DefaultAzureConfig(apiKey, url, deployment)
+		return openai.NewClientWithConfig(config)
+	}
+	return openai.NewClient(apiKey)
 }
