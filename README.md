@@ -71,12 +71,15 @@ RUN go build -o myApp .
 CMD ["./myApp"]
 ```
 
-### GPT-4
+### Model versions
 
-Currently this tool defaults to `gpt-3.5-turbo`, if you have access to GPT-4 and want to use it you can set an evironment variable just like for the api key 
+Currently this tool defaults to
+[`gpt-4-turbo-preview`](https://platform.openai.com/docs/models/gpt-4-and-gpt-4-turbo).
+You can alternatively use any of the 3.5 & 4 models by specifying the model
+name in an environment variable
 
 ```sh
-export OPENAI_MODEL=gpt-4
+export OPENAI_MODEL=gpt-3.5-turbo-0125
 ```
 
 

@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	openai "github.com/sashabaranov/go-openai"
+	"github.com/sashabaranov/go-openai"
 )
 
 const (
-	defaultModel = openai.GPT3Dot5Turbo
+	defaultModel = openai.GPT4TurboPreview
 	sessionFile  = "/tmp/chatgpt-cli-last-session.json"
 )
 
