@@ -92,7 +92,13 @@ func getClient() *openai.Client {
 	url := os.Getenv("OPENAI_AZURE_ENDPOINT")
 	if url != "" {
 		deployment := os.Getenv("OPENAI_AZURE_MODEL")
-		config := openai.DefaultAzureConfig(apiKey, url, deployment)
+		config := openai.DefaultAzureConfig(apiKey, url)
+		config.AzureModelMapperFunc = func(model string) string {
+			if deployment != "" {
+				return deployment
+			}
+			return model
+		}
 		return openai.NewClientWithConfig(config)
 	}
 	return openai.NewClient(apiKey)
