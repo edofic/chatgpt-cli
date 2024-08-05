@@ -74,7 +74,7 @@ CMD ["./myApp"]
 ### Model versions
 
 Currently this tool defaults to
-[`gpt-4-turbo-preview`](https://platform.openai.com/docs/models/gpt-4-and-gpt-4-turbo).
+[`gpt-4o-mini`](https://platform.openai.com/docs/models/gpt-4o-mini).
 You can alternatively use any of the 3.5 & 4 models by specifying the model
 name in an environment variable
 

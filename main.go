@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	defaultModel = openai.GPT4TurboPreview
+	defaultModel = openai.GPT4oMini
 	sessionFile  = "/tmp/chatgpt-cli-last-session.json"
 )
 
