@@ -1,5 +1,5 @@
 module github.com/edofic/chatgpt-cli
 
-go 1.22
+go 1.26
 
-require github.com/sashabaranov/go-openai v1.27.1
+require github.com/sashabaranov/go-openai v1.41.2
