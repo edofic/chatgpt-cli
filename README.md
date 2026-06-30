@@ -31,6 +31,21 @@ The capital of France is Paris.
 
 *Note* responses are streamed as they are generated (just as on the web UI) which gives you something almost immediately even for longer responses.
 
+### Interactive mode
+
+If you invoke the CLI without a message, it drops into an interactive REPL. Type a message and press Enter to send; the response streams back and the session stays open for follow-ups. Press Ctrl-D (or Ctrl-C) to exit.
+
+```sh
+$ chatgpt-cli
+> what is the capital of france?
+The capital of France is Paris.
+> and germany?
+The capital of Germany is Berlin.
+>
+```
+
+Flags like `-c`, `-systemMsg`, and `-includeFile` work the same way in interactive mode. Each exchange is saved to the session file, so you can resume later with `-c`.
+
 ### Follow up questions
 
 You can pass `-c` to _continue_ last session and ask follow up questions.
@@ -73,13 +88,12 @@ CMD ["./myApp"]
 
 ### Model versions
 
-Currently this tool defaults to
-[`gpt-4o-mini`](https://platform.openai.com/docs/models/gpt-4o-mini).
-You can alternatively use any of the 3.5 & 4 models by specifying the model
+Currently this tool defaults to `gpt-5.4-mini`.
+You can alternatively use any other available model by specifying the model
 name in an environment variable
 
 ```sh
-export OPENAI_MODEL=gpt-3.5-turbo-0125
+export OPENAI_MODEL=gpt-4o
 ```
 
 
