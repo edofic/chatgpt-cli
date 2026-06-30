@@ -31,6 +31,25 @@ The capital of France is Paris.
 
 *Note* responses are streamed as they are generated (just as on the web UI) which gives you something almost immediately even for longer responses.
 
+### Reading from stdin
+
+Pass `-` as the message to read the prompt from stdin. Useful for piping in content.
+
+```sh
+$ cat notes.txt | chatgpt-cli -
+```
+
+### Tuning the response
+
+Two flags let you tune the model output:
+
+- `-maxTokens` sets the maximum number of tokens to generate (default `500`)
+- `-temperature` sets the sampling temperature (default `0`)
+
+```sh
+$ chatgpt-cli -maxTokens 2000 -temperature 0.7 'write a short poem about Go'
+```
+
 ### Interactive mode
 
 If you invoke the CLI without a message, it drops into an interactive REPL. Type a message and press Enter to send; the response streams back and the session stays open for follow-ups. Press Ctrl-D (or Ctrl-C) to exit.
@@ -97,6 +116,14 @@ export OPENAI_MODEL=gpt-4o
 ```
 
 
+### Custom API endpoint
+
+To point at any OpenAI-compatible API (e.g. a local LLM server or a proxy), set `OPENAI_ENDPOINT`:
+
+```sh
+export OPENAI_ENDPOINT='http://localhost:8080/v1'
+```
+
 ### Azure OpenAI Service
 
 To use Azure hosted models specify two more environment variables on top of your API key
@@ -105,3 +132,25 @@ To use Azure hosted models specify two more environment variables on top of your
 OPENAI_AZURE_ENDPOINT='https://<your subdomain>.openai.azure.com/'
 OPENAI_AZURE_MODEL='<your model deployment name>'
 ```
+
+## Configuration reference
+
+### Flags
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `-maxTokens` | `500` | Maximum number of tokens to generate |
+| `-temperature` | `0` | Sampling temperature |
+| `-systemMsg` | `""` | System message to include with the prompt |
+| `-includeFile` | `""` | File to include as an additional user message |
+| `-c` | `false` | Continue last session |
+
+### Environment variables
+
+| Variable | Description |
+| --- | --- |
+| `OPENAI_API_KEY` | API key (required) |
+| `OPENAI_MODEL` | Override the default model (`gpt-5.4-mini`) |
+| `OPENAI_ENDPOINT` | Base URL for an OpenAI-compatible API |
+| `OPENAI_AZURE_ENDPOINT` | Azure OpenAI endpoint URL |
+| `OPENAI_AZURE_MODEL` | Azure deployment name |
