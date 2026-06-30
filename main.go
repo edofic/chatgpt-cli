@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	defaultModel = openai.GPT4oMini
+	defaultModel = "gpt-5.4-mini"
 	sessionFile  = "/tmp/chatgpt-cli-last-session.json"
 )
 
@@ -133,7 +133,7 @@ func saveCompletion(req openai.ChatCompletionRequest) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(sessionFile, resJson, 0644)
+	return os.WriteFile(sessionFile, resJson, 0o644)
 }
 
 func newCompletionRequest(p params, model string) openai.ChatCompletionRequest {
@@ -142,11 +142,11 @@ func newCompletionRequest(p params, model string) openai.ChatCompletionRequest {
 		msgs = append(msgs, openai.ChatCompletionMessage{Role: openai.ChatMessageRoleSystem, Content: p.systemMsg})
 	}
 	return openai.ChatCompletionRequest{
-		Model:       model,
-		MaxTokens:   p.maxTokens,
-		Temperature: float32(p.temperature),
-		Stream:      true,
-		Messages:    msgs,
+		Model:               model,
+		MaxCompletionTokens: p.maxTokens,
+		Temperature:         float32(p.temperature),
+		Stream:              true,
+		Messages:            msgs,
 	}
 }
 
