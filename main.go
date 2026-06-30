@@ -26,6 +26,7 @@ type params struct {
 	includeFile     string
 	temperature     float64
 	continueSession bool
+	interactive     bool
 	msg             string
 }
 
@@ -37,6 +38,12 @@ func main() {
 	if model == "" {
 		model = defaultModel
 	}
+
+	if p.interactive {
+		runInteractive(client, model, p)
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
@@ -60,6 +67,60 @@ func main() {
 	}
 }
 
+func printSession(req openai.ChatCompletionRequest) {
+	for _, m := range req.Messages {
+		switch m.Role {
+		case openai.ChatMessageRoleSystem:
+			fmt.Printf("[system] %s\n", m.Content)
+		case openai.ChatMessageRoleUser:
+			fmt.Printf("> %s\n", m.Content)
+		case openai.ChatMessageRoleAssistant:
+			fmt.Printf("%s\n", m.Content)
+		}
+	}
+}
+
+func runInteractive(client *openai.Client, model string, p params) {
+	req := getCompletionRequest(p, model)
+
+	if p.continueSession {
+		printSession(req)
+	}
+
+	scanner := bufio.NewScanner(os.Stdin)
+	for {
+		fmt.Print("> ")
+		if !scanner.Scan() {
+			fmt.Println()
+			break
+		}
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+
+		req.Messages = append(req.Messages, openai.ChatCompletionMessage{Role: openai.ChatMessageRoleUser, Content: line})
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		fullResponse, err := streamCompletion(ctx, client, req, func(chunk string) error {
+			_, err := fmt.Print(chunk)
+			return err
+		})
+		cancel()
+		fmt.Println()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			continue
+		}
+
+		req.Messages = append(req.Messages, openai.ChatCompletionMessage{Role: openai.ChatMessageRoleAssistant, Content: fullResponse})
+
+		if err := saveCompletion(req); err != nil {
+			fmt.Fprintf(os.Stderr, "warn: failed to save session: %v\n", err)
+		}
+	}
+}
+
 func parseArgs() params {
 	// var versions of flags from main, returning a params struct
 	var p params
@@ -75,8 +136,8 @@ func parseArgs() params {
 	flag.Parse()
 	msg := strings.TrimSpace(strings.Join(flag.Args(), " "))
 	if msg == "" {
-		flag.Usage()
-		os.Exit(1)
+		p.interactive = true
+		return p
 	} else if msg == "-" {
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
@@ -89,6 +150,11 @@ func parseArgs() params {
 
 func getClient() *openai.Client {
 	apiKey := os.Getenv("OPENAI_API_KEY")
+	if endpoint := os.Getenv("OPENAI_ENDPOINT"); endpoint != "" {
+		config := openai.DefaultConfig(apiKey)
+		config.BaseURL = endpoint
+		return openai.NewClientWithConfig(config)
+	}
 	url := os.Getenv("OPENAI_AZURE_ENDPOINT")
 	if url != "" {
 		deployment := os.Getenv("OPENAI_AZURE_MODEL")
