@@ -125,19 +125,82 @@ To point at any OpenAI-compatible API (e.g. a local LLM server or a proxy), set 
 export OPENAI_ENDPOINT='http://localhost:8080/v1'
 ```
 
+## Agentic mode
+
+Pass `-agent` to give the model tools it can call to accomplish multi-step tasks. The model loops autonomously, calling tools and feeding results back, until it decides it is done.
+
+```sh
+$ llm-cli -agent 'add a TODO comment at the top of main.go'
+tool call read("main.go")
+tool call edit("main.go")
+Done. Added a TODO comment at the top of main.go.
+```
+
+Each tool call is printed to stdout as it happens so you can follow along.
+
+### Available tools
+
+| Tool | What it does |
+|------|-------------|
+| `read` | Read a local file, with optional line offset and limit |
+| `write` | Create a new file (fails if it already exists) |
+| `edit` | Replace an exact string inside an existing file (fails if not found or not unique) |
+| `bash` | Run a shell command and return combined stdout+stderr (disabled by default; see below) |
+
+### Bash tool and sandboxing
+
+The `bash` tool is disabled by default. Enable it with `-tool-mode`:
+
+```sh
+# Sandboxed: cwd read/write only, no network, uses fence
+llm-cli -agent -tool-mode=safe 'run the tests and fix any failures'
+
+# Unrestricted: full filesystem and network access
+llm-cli -agent -tool-mode=unsafe 'set up the project dependencies'
+```
+
+`safe` mode uses [fence](https://github.com/fencesandbox/fence) to enforce:
+- filesystem writes restricted to the current directory
+- filesystem reads restricted to the current directory (system paths blocked)
+- all outbound network blocked
+
+`unsafe` gives the model a plain `sh -c` with no restrictions. Use it only when you trust the task and the model output.
+
+### Customising the sandbox with fence.jsonc
+
+When `-tool-mode=safe` is active, llm-cli looks for a `fence.jsonc` in the current directory (and walks up to the user config at `~/.config/fence/fence.jsonc`). Settings there are merged on top of the defaults, so you can poke holes without switching to `unsafe`:
+
+```jsonc
+// fence.jsonc
+{
+  "network": {
+    // allow the model to fetch packages
+    "allowedDomains": ["*.npmjs.org", "registry.npmjs.org"]
+  },
+  "filesystem": {
+    // also allow reading the shared fixtures directory
+    "allowRead": ["../fixtures"]
+  }
+}
+```
+
+See the [fence documentation](https://github.com/fencesandbox/fence) for the full config reference.
+
 ## Configuration reference
 
 ### Flags
 
 | Flag | Default | Description |
 | --- | --- | --- |
-| `-maxTokens` | `500` | Maximum number of tokens to generate |
+| `-maxTokens` | `8192` | Maximum number of tokens to generate |
 | `-temperature` | `0` | Sampling temperature |
 | `-model` | `""` | Model to use (overrides `OPENAI_MODEL`) |
 | `-systemMsg` | `""` | System message to include with the prompt |
 | `-includeFile` | `""` | File to include as an additional user message |
 | `-pretty` | auto | Render markdown; defaults to true when stdout is a TTY |
 | `-c` | `false` | Continue last session |
+| `-agent` | `false` | Enable agentic mode (read/write/edit tools) |
+| `-tool-mode` | `off` | Bash tool: `off`, `safe` (fence-sandboxed), `unsafe` |
 
 ### Environment variables
 
