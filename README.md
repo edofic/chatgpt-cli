@@ -8,7 +8,7 @@ This is a command line client for using LLMs over OpenAI-compatible APIs. You ca
 https://user-images.githubusercontent.com/597476/230737546-d9465089-d323-45a5-87d7-84901d8054c7.mov
 
 
-## Instalation
+## Installation
 
 ```
 go install github.com/edofic/llm-cli@latest
@@ -25,7 +25,7 @@ export OPENAI_API_KEY=your_api_key
 Without any params the arguments (plural, you can omit the quotes) are taken to be your message
 
 ```sh
-$ llm-cli 'what is the capital of france?'                                                         /tmp
+$ llm-cli 'what is the capital of france?'
 The capital of France is Paris.
 ```
 
@@ -63,7 +63,7 @@ The capital of Germany is Berlin.
 >
 ```
 
-Flags like `-c`, `-systemMsg`, and `-includeFile` work the same way in interactive mode. Each exchange is saved to the session file, so you can resume later with `-c`.
+Flags like `-c`, `-systemMsg`, and `-includeFile` work the same way in interactive mode. `-includeFile` loads the file as initial context before the first prompt. Each exchange is saved to the session file, so you can resume later with `-c`.
 
 ### Follow up questions
 
@@ -108,8 +108,11 @@ CMD ["./myApp"]
 ### Model versions
 
 Currently this tool defaults to `gpt-5.4-mini`.
-You can alternatively use any other available model by specifying the model
-name in an environment variable
+You can override the model with the `-model` flag or the `OPENAI_MODEL` environment variable (the flag takes precedence):
+
+```sh
+llm-cli -model gpt-4o 'explain this'
+```
 
 ```sh
 export OPENAI_MODEL=gpt-4o
@@ -124,15 +127,6 @@ To point at any OpenAI-compatible API (e.g. a local LLM server or a proxy), set 
 export OPENAI_ENDPOINT='http://localhost:8080/v1'
 ```
 
-### Azure OpenAI Service
-
-To use Azure hosted models specify two more environment variables on top of your API key
-
-```sh
-OPENAI_AZURE_ENDPOINT='https://<your subdomain>.openai.azure.com/'
-OPENAI_AZURE_MODEL='<your model deployment name>'
-```
-
 ## Configuration reference
 
 ### Flags
@@ -141,8 +135,10 @@ OPENAI_AZURE_MODEL='<your model deployment name>'
 | --- | --- | --- |
 | `-maxTokens` | `500` | Maximum number of tokens to generate |
 | `-temperature` | `0` | Sampling temperature |
+| `-model` | `""` | Model to use (overrides `OPENAI_MODEL`) |
 | `-systemMsg` | `""` | System message to include with the prompt |
 | `-includeFile` | `""` | File to include as an additional user message |
+| `-pretty` | auto | Render markdown; defaults to true when stdout is a TTY |
 | `-c` | `false` | Continue last session |
 
 ### Environment variables
@@ -151,6 +147,4 @@ OPENAI_AZURE_MODEL='<your model deployment name>'
 | --- | --- |
 | `OPENAI_API_KEY` | API key (required) |
 | `OPENAI_MODEL` | Override the default model (`gpt-5.4-mini`) |
-| `OPENAI_ENDPOINT` | Base URL for an OpenAI-compatible API |
-| `OPENAI_AZURE_ENDPOINT` | Azure OpenAI endpoint URL |
-| `OPENAI_AZURE_MODEL` | Azure deployment name |
+| `OPENAI_ENDPOINT` | Base URL for an OpenAI-compatible API (e.g. `http://localhost:8080/v1`) |

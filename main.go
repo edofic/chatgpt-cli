@@ -185,6 +185,15 @@ func printSession(req completionRequest, pretty bool) {
 func runInteractive(model string, p params) {
 	req := getCompletionRequest(p, model)
 
+	if p.includeFile != "" {
+		contents, err := os.ReadFile(p.includeFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error reading file: %v\n", err)
+		} else {
+			req.Messages = append(req.Messages, message{Role: "user", Content: string(contents)})
+		}
+	}
+
 	if p.continueSession {
 		printSession(req, p.pretty)
 	}
@@ -257,6 +266,7 @@ func parseArgs() params {
 		p.interactive = true
 		return p
 	} else if msg == "-" {
+		msg = ""
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
 			msg += scanner.Text() + "\n"
@@ -271,7 +281,11 @@ func endpoint() string {
 	if ep == "" {
 		return defaultEndpoint
 	}
-	return strings.TrimRight(ep, "/") + "/chat/completions"
+	ep = strings.TrimRight(ep, "/")
+	if strings.HasSuffix(ep, "/chat/completions") {
+		return ep
+	}
+	return ep + "/chat/completions"
 }
 
 func apiKey() string {
@@ -350,6 +364,7 @@ func streamCompletion(ctx context.Context, req completionRequest, callback func(
 
 	var chunks []string
 	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if !strings.HasPrefix(line, "data: ") {
