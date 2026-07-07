@@ -13,6 +13,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/glamour"
@@ -133,7 +134,7 @@ func main() {
 		renderer = &ttyRenderer{}
 	}
 
-	fullResponse, citations, _, _, err := streamCompletion(ctx, req, func(chunk string) error {
+	cb := func(chunk string) error {
 		if isTTY {
 			buf.WriteString(chunk)
 			renderer.render(buf.String())
@@ -141,7 +142,14 @@ func main() {
 		}
 		_, err := fmt.Print(chunk)
 		return err
-	})
+	}
+	if isTTY {
+		s := newSpinner()
+		cb = withSpinner(s, cb)
+		defer s.done()
+	}
+
+	fullResponse, citations, _, _, err := streamCompletion(ctx, req, cb)
 	if !isTTY {
 		fmt.Println()
 	}
@@ -177,6 +185,47 @@ func (r *ttyRenderer) render(text string) {
 	}
 	fmt.Print(rendered)
 	r.prev = rendered
+}
+
+type spinner struct {
+	stop chan struct{}
+	once sync.Once
+	wg   sync.WaitGroup
+}
+
+func newSpinner() *spinner {
+	s := &spinner{stop: make(chan struct{})}
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		dots := ""
+		for {
+			select {
+			case <-s.stop:
+				fmt.Print("\r\033[K")
+				return
+			case <-time.After(300 * time.Millisecond):
+				dots += "."
+				fmt.Printf("\r\033[36m%s\033[0m", dots)
+			}
+		}
+	}()
+	return s
+}
+
+func (s *spinner) done() {
+	s.once.Do(func() {
+		close(s.stop)
+		s.wg.Wait()
+	})
+}
+
+// withSpinner wraps a chunk callback to stop the spinner on the first chunk.
+func withSpinner(s *spinner, cb func(string) error) func(string) error {
+	return func(chunk string) error {
+		s.done()
+		return cb(chunk)
+	}
 }
 
 func printCitations(citations []citation) {
@@ -277,7 +326,7 @@ func runInteractive(model string, p params) {
 			if isTTY {
 				renderer = &ttyRenderer{}
 			}
-			fullResponse, citations, _, _, err := streamCompletion(ctx, req, func(chunk string) error {
+			cb := func(chunk string) error {
 				if isTTY {
 					buf.WriteString(chunk)
 					renderer.render(buf.String())
@@ -285,7 +334,16 @@ func runInteractive(model string, p params) {
 				}
 				_, err := fmt.Print(chunk)
 				return err
-			})
+			}
+			var spin *spinner
+			if isTTY {
+				spin = newSpinner()
+				cb = withSpinner(spin, cb)
+			}
+			fullResponse, citations, _, _, err := streamCompletion(ctx, req, cb)
+			if spin != nil {
+				spin.done()
+			}
 			if !isTTY {
 				fmt.Println()
 			}
@@ -564,7 +622,7 @@ func runAgentTurn(ctx context.Context, req *completionRequest, bash *bashRunner,
 			renderer = &ttyRenderer{}
 		}
 
-		fullResponse, citations, toolCalls, finishReason, err := streamCompletion(ctx, *req, func(chunk string) error {
+		cb := func(chunk string) error {
 			if pretty {
 				buf.WriteString(chunk)
 				renderer.render(buf.String())
@@ -572,7 +630,17 @@ func runAgentTurn(ctx context.Context, req *completionRequest, bash *bashRunner,
 			}
 			_, err := fmt.Print(chunk)
 			return err
-		})
+		}
+		var spin *spinner
+		if pretty {
+			spin = newSpinner()
+			cb = withSpinner(spin, cb)
+		}
+
+		fullResponse, citations, toolCalls, finishReason, err := streamCompletion(ctx, *req, cb)
+		if spin != nil {
+			spin.done()
+		}
 		if !pretty {
 			fmt.Println()
 		}
