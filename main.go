@@ -21,7 +21,7 @@ import (
 const (
 	defaultModel    = "gpt-5.4-mini"
 	defaultEndpoint = "https://api.openai.com/v1/chat/completions"
-	sessionFile     = "/tmp/chatgpt-cli-last-session.json"
+	sessionFile     = "/tmp/llm-cli-last-session.json"
 )
 
 type message struct {

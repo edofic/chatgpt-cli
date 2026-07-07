@@ -1,4 +1,4 @@
-module github.com/edofic/chatgpt-cli
+module github.com/edofic/llm-cli
 
 go 1.26
 

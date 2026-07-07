@@ -1,8 +1,8 @@
-# ChatGPT CLI
+# LLM CLI
 
-[![main](https://github.com/edofic/chatgpt-cli/actions/workflows/main.yml/badge.svg)](https://github.com/edofic/chatgpt-cli/actions/workflows/main.yml)
+[![main](https://github.com/edofic/llm-cli/actions/workflows/main.yml/badge.svg)](https://github.com/edofic/llm-cli/actions/workflows/main.yml)
 
-This is a command line client for using ChatGPT. You can easily ask questions (responses are streamed in real time), tweak system prompt (or other params), include local files, pipe the response and ask follow up questions. 
+This is a command line client for using LLMs over OpenAI-compatible APIs. You can easily ask questions (responses are streamed in real time), tweak system prompt (or other params), include local files, pipe the response and ask follow up questions. 
 
 
 https://user-images.githubusercontent.com/597476/230737546-d9465089-d323-45a5-87d7-84901d8054c7.mov
@@ -11,7 +11,7 @@ https://user-images.githubusercontent.com/597476/230737546-d9465089-d323-45a5-87
 ## Instalation
 
 ```
-go install github.com/edofic/chatgpt-cli@latest
+go install github.com/edofic/llm-cli@latest
 ```
 
 ## Usage
@@ -25,7 +25,7 @@ export OPENAI_API_KEY=your_api_key
 Without any params the arguments (plural, you can omit the quotes) are taken to be your message
 
 ```sh
-$ chatgpt-cli 'what is the capital of france?'                                                         /tmp
+$ llm-cli 'what is the capital of france?'                                                         /tmp
 The capital of France is Paris.
 ```
 
@@ -36,7 +36,7 @@ The capital of France is Paris.
 Pass `-` as the message to read the prompt from stdin. Useful for piping in content.
 
 ```sh
-$ cat notes.txt | chatgpt-cli -
+$ cat notes.txt | llm-cli -
 ```
 
 ### Tuning the response
@@ -47,7 +47,7 @@ Two flags let you tune the model output:
 - `-temperature` sets the sampling temperature (default `0`)
 
 ```sh
-$ chatgpt-cli -maxTokens 2000 -temperature 0.7 'write a short poem about Go'
+$ llm-cli -maxTokens 2000 -temperature 0.7 'write a short poem about Go'
 ```
 
 ### Interactive mode
@@ -55,7 +55,7 @@ $ chatgpt-cli -maxTokens 2000 -temperature 0.7 'write a short poem about Go'
 If you invoke the CLI without a message, it drops into an interactive REPL. Type a message and press Enter to send; the response streams back and the session stays open for follow-ups. Press Ctrl-D (or Ctrl-C) to exit.
 
 ```sh
-$ chatgpt-cli
+$ llm-cli
 > what is the capital of france?
 The capital of France is Paris.
 > and germany?
@@ -70,18 +70,18 @@ Flags like `-c`, `-systemMsg`, and `-includeFile` work the same way in interacti
 You can pass `-c` to _continue_ last session and ask follow up questions.
 
 ```sh
-$ chatgpt-cli -c 'what about germany?' 
+$ llm-cli -c 'what about germany?' 
 The capital of Germany is Berlin.
 ```
 
-Session is stored in `/tmp/chatgpt-cli-last-session.json` - there is only one "last session".
+Session is stored in `/tmp/llm-cli-last-session.json` - there is only one "last session".
 
 ### System message
 
 You can configure the system prompt and tweak behavior this way 
 
 ```sh
-$ chatgpt-cli -systemMsg 'You are an assistant that speaks like Shakespeare.' 'what is the capital of france?'
+$ llm-cli -systemMsg 'You are an assistant that speaks like Shakespeare.' 'what is the capital of france?'
 The fair capital of France is known as Paris, my would-be lord.
 ```
 
@@ -90,14 +90,14 @@ The fair capital of France is known as Paris, my would-be lord.
 You can pass in local files as additional messages
 
 ```sh
-$ chatgpt-cli -includeFile main.go 'what is this in one sentence?'               
-This is a Go programming language script that uses the OpenAI API to provide a command-line interface for interacting with the ChatGPT AI model to generate chat messages.
+$ llm-cli -includeFile main.go 'what is this in one sentence?'               
+This is a Go programming language script that uses an OpenAI-compatible API to provide a command-line interface for interacting with AI language models.
 ```
 
 Or you can store the output
 
 ```sh
-chatgpt-cli 'write a dockerfile for a Go program, omit any explanation' | tee Dockerfile
+llm-cli 'write a dockerfile for a Go program, omit any explanation' | tee Dockerfile
 FROM golang:latest
 WORKDIR /app
 COPY . .
