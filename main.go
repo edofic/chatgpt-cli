@@ -393,7 +393,7 @@ func parseArgs() params {
 	flag.Float64Var(&p.temperature, "temperature", 0, "Temperature")
 	flag.BoolVar(&p.continueSession, "c", false, "Continue last session (ignores other flags)")
 	flag.BoolVar(&p.agent, "agent", false, "Enable agentic mode with read/write/edit tools")
-	toolModeVal := flag.String("tool-mode", "off", "Bash tool access: off (default), safe (fence-sandboxed, respects fence.jsonc), unsafe (unrestricted)")
+	toolModeVal := flag.String("tool-mode", "off", "Bash tool access: off (default), safe (fence-sandboxed, respects fence.jsonc), ro-system (read-only whole system + RW cwd), unsafe (unrestricted)")
 	isTTY := term.IsTerminal(int(os.Stdout.Fd()))
 	flag.BoolVar(&p.pretty, "pretty", isTTY, "Render markdown (default: true when stdout is a TTY)")
 	flag.Usage = func() {
@@ -402,7 +402,9 @@ func parseArgs() params {
 		fmt.Fprintf(os.Stderr, `
 Agentic mode (-agent) gives the model read/write/edit tools and loops until done.
 Add -tool-mode=safe to also enable the bash tool, sandboxed to the current directory
-via fence (no network, no writes outside cwd). Use -tool-mode=unsafe for unrestricted
+via fence (no network, no writes outside cwd). Use -tool-mode=ro-system for read
+access to the whole filesystem with writes still limited to cwd (useful for Go,
+which loads packages from outside the project). Use -tool-mode=unsafe for unrestricted
 bash access. Drop a fence.jsonc in your project directory to customise the sandbox
 (e.g. allow specific domains or extra readable paths).
 `)

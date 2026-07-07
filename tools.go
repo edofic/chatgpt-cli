@@ -124,9 +124,10 @@ var agentTools = []toolDef{
 type toolMode string
 
 const (
-	toolModeOff    toolMode = "off"
-	toolModeSafe   toolMode = "safe"
-	toolModeUnsafe toolMode = "unsafe"
+	toolModeOff      toolMode = "off"
+	toolModeSafe     toolMode = "safe"
+	toolModeUnsafe   toolMode = "unsafe"
+	toolModeRoSystem toolMode = "ro-system" // read whole system, write only cwd
 )
 
 // bashRunner wraps command execution, optionally via a fence sandbox manager.
@@ -140,11 +141,16 @@ func newBashRunner(mode toolMode, workdir string) (*bashRunner, error) {
 		return nil, nil
 	}
 	r := &bashRunner{workdir: workdir}
-	if mode == toolModeSafe {
+	if mode == toolModeSafe || mode == toolModeRoSystem {
 		if !fence.IsSupported() {
 			return nil, fmt.Errorf("fence sandboxing is not supported on this platform; use -tool-mode=unsafe to run without sandboxing")
 		}
-		cfg := safeFenceConfig(workdir)
+		var cfg *fence.Config
+		if mode == toolModeRoSystem {
+			cfg = roSystemFenceConfig(workdir)
+		} else {
+			cfg = safeFenceConfig(workdir)
+		}
 		// merge project-level fence.jsonc if present
 		if cfgPath, err := fence.ResolveConfigPath(workdir); err == nil && cfgPath != "" {
 			if override, err := fence.LoadConfigResolved(cfgPath); err == nil {
@@ -183,6 +189,25 @@ func safeFenceConfig(workdir string) *fence.Config {
 	// On Nix systems coreutils is a multi-call binary; fence cannot runtime-deny
 	// individual aliases (e.g. chroot) without blocking all of them. We've
 	// reviewed this and accept the limitation.
+	cfg.Command.AcceptSharedBinaryCannotRuntimeDeny = []string{"chroot"}
+	return cfg
+}
+
+func roSystemFenceConfig(workdir string) *fence.Config {
+	cfg := fence.DefaultConfig()
+	cfg.Filesystem.DefaultDenyRead = false // read anywhere
+	cfg.Filesystem.AllowRead = []string{"/"}
+	cfg.Filesystem.AllowWrite = []string{workdir}
+	cfg.Filesystem.AllowExecute = []string{
+		"/usr/bin",
+		"/usr/local/bin",
+		"/bin",
+		"/sbin",
+		"/usr/sbin",
+		"/nix/store",
+		"/run/current-system",
+		homeDir() + "/.nix-profile",
+	}
 	cfg.Command.AcceptSharedBinaryCannotRuntimeDeny = []string{"chroot"}
 	return cfg
 }
