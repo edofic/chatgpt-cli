@@ -83,6 +83,7 @@ type params struct {
 	pretty          bool
 	agent           bool
 	toolMode        toolMode
+	toolLog         toolLogMode
 	msg             string
 }
 
@@ -289,6 +290,8 @@ func runInteractive(model string, p params) {
 		}
 	}
 
+	logger := newToolLogger(p.toolLog)
+
 	rl, err := readline.New("\033[36m❯\033[0m ")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -316,7 +319,7 @@ func runInteractive(model string, p params) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 
 		if p.agent {
-			if err := runAgentTurn(ctx, &req, bash, p.pretty); err != nil {
+			if err := runAgentTurn(ctx, &req, bash, p.pretty, logger); err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			}
 		} else {
@@ -394,6 +397,7 @@ func parseArgs() params {
 	flag.BoolVar(&p.continueSession, "c", false, "Continue last session (ignores other flags)")
 	flag.BoolVar(&p.agent, "agent", false, "Enable agentic mode with read/write/edit tools")
 	toolModeVal := flag.String("tool-mode", "off", "Bash tool access: off (default), safe (fence-sandboxed, respects fence.jsonc), ro-system (read-only whole system + RW cwd), unsafe (unrestricted)")
+	toolLogVal := flag.String("tool-log", "normal", "Tool call logging: off, compact, normal (default), verbose, jsonl")
 	isTTY := term.IsTerminal(int(os.Stdout.Fd()))
 	flag.BoolVar(&p.pretty, "pretty", isTTY, "Render markdown (default: true when stdout is a TTY)")
 	flag.Usage = func() {
@@ -411,6 +415,11 @@ bash access. Drop a fence.jsonc in your project directory to customise the sandb
 	}
 	flag.Parse()
 	p.toolMode = toolMode(*toolModeVal)
+	p.toolLog = toolLogMode(*toolLogVal)
+	if !validToolLogMode(p.toolLog) {
+		fmt.Fprintf(os.Stderr, "invalid -tool-log value %q; using normal\n", p.toolLog)
+		p.toolLog = toolLogNormal
+	}
 	msg := strings.TrimSpace(strings.Join(flag.Args(), " "))
 	if msg == "" {
 		p.interactive = true
@@ -604,7 +613,8 @@ func runAgentLoop(ctx context.Context, req completionRequest, p params) error {
 		defer bash.close()
 	}
 
-	if err := runAgentTurn(ctx, &req, bash, p.pretty); err != nil {
+	logger := newToolLogger(p.toolLog)
+	if err := runAgentTurn(ctx, &req, bash, p.pretty, logger); err != nil {
 		return err
 	}
 	if err := saveCompletion(req); err != nil {
@@ -616,7 +626,7 @@ func runAgentLoop(ctx context.Context, req completionRequest, p params) error {
 // runAgentTurn runs one user turn: streams a response, executes any tool calls,
 // feeds results back, and repeats until the model stops calling tools.
 // req is updated in place with all new messages appended.
-func runAgentTurn(ctx context.Context, req *completionRequest, bash *bashRunner, pretty bool) error {
+func runAgentTurn(ctx context.Context, req *completionRequest, bash *bashRunner, pretty bool, logger *toolLogger) error {
 	for {
 		var renderer *ttyRenderer
 		var buf strings.Builder
@@ -674,12 +684,15 @@ func runAgentTurn(ctx context.Context, req *completionRequest, bash *bashRunner,
 		}
 
 		for _, tc := range toolCalls {
-			fmt.Printf("tool call %s(%s)\n", tc.name, toolCallSummary(tc))
+			id := logger.nextID()
+			logger.logCall(id, tc)
+			start := time.Now()
 			result, toolErr := executeTool(tc, bash)
+			dur := time.Since(start)
+			logger.logResult(id, tc, toolLogResult{Result: result, Err: toolErr, Duration: dur})
 			var content string
 			if toolErr != nil {
 				content = "error: " + toolErr.Error()
-				fmt.Fprintf(os.Stderr, "[tool] %s error: %v\n", tc.name, toolErr)
 			} else {
 				content = result
 			}

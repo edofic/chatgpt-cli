@@ -113,9 +113,10 @@ var agentTools = []toolDef{
 			Parameters: toolParameters{
 				Type: "object",
 				Properties: map[string]toolProp{
-					"command": {Type: "string", Description: "Shell command to execute"},
+					"command":     {Type: "string", Description: "Shell command to execute"},
+					"description": {Type: "string", Description: "One-line human-readable summary of what this command does and why, shown in logs"},
 				},
-				Required: []string{"command"},
+				Required: []string{"command", "description"},
 			},
 		},
 	},
@@ -372,19 +373,6 @@ func toolCallsFromPending(pending map[int]*pendingToolCall) ([]toolCall, error) 
 		calls = append(calls, toolCall{id: p.id, name: p.name, args: args})
 	}
 	return calls, nil
-}
-
-func toolCallSummary(tc toolCall) string {
-	if path, ok := tc.args["path"].(string); ok {
-		return fmt.Sprintf("%q", path)
-	}
-	if cmd, ok := tc.args["command"].(string); ok {
-		if len(cmd) > 60 {
-			cmd = cmd[:60] + "..."
-		}
-		return fmt.Sprintf("%q", cmd)
-	}
-	return ""
 }
 
 func mustMarshal(v any) string {
