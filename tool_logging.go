@@ -196,6 +196,8 @@ func callDetailLines(tc toolCall, verbose, color bool) []string {
 		lines = append(lines, logLine(color, keyLine(color, "replace", fmt.Sprintf("%d bytes → %d bytes", len(oldStr), len(newStr)))))
 		lines = append(lines, sectionLine(color, "diff"))
 		lines = append(lines, unifiedDiff(path, redact(oldStr), redact(newStr), verbose, color)...)
+	case "search":
+		lines = append(lines, logLine(color, keyLine(color, "query", strArg(tc, "query"))))
 	}
 	return lines
 }
@@ -244,6 +246,8 @@ func resultDetailLines(tc toolCall, r toolLogResult, verbose, color bool) []stri
 				lines = append(lines, codeBlock(preview(redact(content), 8000), color)...)
 			}
 		}
+	case "search":
+		lines = append(lines, logLine(color, keyLine(color, "result", fmt.Sprintf("%d bytes", len(r.Result)))))
 	default:
 		if r.Result != "" {
 			lines = append(lines, logLine(color, keyLine(color, "result", fmt.Sprintf("%d bytes", len(r.Result)))))
@@ -262,6 +266,8 @@ func summarizedArgs(tc toolCall) map[string]any {
 		m["command_bytes"] = len(cmd)
 	case "read", "write", "edit":
 		m["path"] = strArg(tc, "path")
+	case "search":
+		m["query"] = strArg(tc, "query")
 	}
 	return m
 }
@@ -293,6 +299,8 @@ func compactToolTarget(tc toolCall) string {
 		return fmt.Sprintf("%q", previewOneLine(redact(firstExecutableLine(cmd)), 80))
 	case "read", "write", "edit":
 		return fmt.Sprintf("%q", strArg(tc, "path"))
+	case "search":
+		return fmt.Sprintf("%q", previewOneLine(strArg(tc, "query"), 80))
 	default:
 		return ""
 	}

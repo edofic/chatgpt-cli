@@ -1,11 +1,16 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/fencesandbox/fence/pkg/fence"
 )
@@ -118,6 +123,21 @@ var agentTools = []toolDef{
 				},
 				Required: []string{"command", "description"},
 			},
+		},
+	},
+}
+
+var searchToolDef = toolDef{
+	Type: "function",
+	Function: toolFunction{
+		Name:        "search",
+		Description: "Search the web and return an answer with citations.",
+		Parameters: toolParameters{
+			Type: "object",
+			Properties: map[string]toolProp{
+				"query": {Type: "string", Description: "Search query"},
+			},
+			Required: []string{"query"},
 		},
 	},
 }
@@ -249,7 +269,7 @@ func (r *bashRunner) close() {
 	}
 }
 
-func executeTool(tc toolCall, bash *bashRunner) (string, error) {
+func executeTool(tc toolCall, bash *bashRunner, searchModel string) (string, error) {
 	switch tc.name {
 	case "read":
 		return toolRead(tc.args)
@@ -262,6 +282,11 @@ func executeTool(tc toolCall, bash *bashRunner) (string, error) {
 			return "", fmt.Errorf("bash tool is disabled; use -tool-mode=safe or -tool-mode=unsafe to enable it")
 		}
 		return toolBash(tc.args, bash)
+	case "search":
+		if searchModel == "" {
+			return "", fmt.Errorf("search tool requires -search-model flag")
+		}
+		return toolSearch(tc.args, searchModel)
 	default:
 		return "", fmt.Errorf("unknown tool: %s", tc.name)
 	}
@@ -373,6 +398,71 @@ func toolCallsFromPending(pending map[int]*pendingToolCall) ([]toolCall, error) 
 		calls = append(calls, toolCall{id: p.id, name: p.name, args: args})
 	}
 	return calls, nil
+}
+
+func toolSearch(args map[string]any, model string) (string, error) {
+	query, _ := args["query"].(string)
+	if query == "" {
+		return "", fmt.Errorf("query required")
+	}
+
+	reqBody, err := json.Marshal(map[string]any{
+		"model": model,
+		"messages": []map[string]string{
+			{"role": "user", "content": query},
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint(), bytes.NewReader(reqBody))
+	if err != nil {
+		return "", err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+apiKey())
+
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		return "", fmt.Errorf("search request error: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("search API error %d: %s", resp.StatusCode, body)
+	}
+
+	var result struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+		Citations []string `json:"citations"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", fmt.Errorf("failed to parse search response: %w", err)
+	}
+	if len(result.Choices) == 0 {
+		return "", fmt.Errorf("empty search response")
+	}
+
+	out := result.Choices[0].Message.Content
+	if len(result.Citations) > 0 {
+		out += "\n\nSources:\n"
+		for i, c := range result.Citations {
+			out += fmt.Sprintf("  [%d] %s\n", i+1, c)
+		}
+	}
+	return out, nil
 }
 
 func mustMarshal(v any) string {

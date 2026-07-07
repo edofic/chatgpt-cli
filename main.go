@@ -75,6 +75,7 @@ type streamChunk struct {
 type params struct {
 	maxTokens       int
 	model           string
+	searchModel     string
 	systemMsg       string
 	includeFile     string
 	temperature     float64
@@ -103,7 +104,7 @@ func main() {
 		return
 	}
 
-	if p.agent {
+	if p.agent || p.searchModel != "" {
 		req := getCompletionRequest(p, model)
 		req.Messages = append(req.Messages, message{Role: "user", Content: p.msg})
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -318,8 +319,8 @@ func runInteractive(model string, p params) {
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 
-		if p.agent {
-			if err := runAgentTurn(ctx, &req, bash, p.pretty, logger); err != nil {
+		if p.agent || p.searchModel != "" {
+			if err := runAgentTurn(ctx, &req, bash, p.pretty, logger, p.searchModel); err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			}
 		} else {
@@ -391,6 +392,7 @@ func parseArgs() params {
 		modelUsage += " [env: " + envModel + "]"
 	}
 	flag.StringVar(&p.model, "model", "", modelUsage)
+	flag.StringVar(&p.searchModel, "search-model", "", "Model to use for the search tool (e.g. sonar). Exposes a search tool to the agent when set.")
 	flag.StringVar(&p.systemMsg, "systemMsg", "", "System message to include with the prompt")
 	flag.StringVar(&p.includeFile, "includeFile", "", "File to include with the prompt")
 	flag.Float64Var(&p.temperature, "temperature", 0, "Temperature")
@@ -503,7 +505,12 @@ func newCompletionRequest(p params, model string) completionRequest {
 			}
 			tools = append(tools, t)
 		}
+		if p.searchModel != "" {
+			tools = append(tools, searchToolDef)
+		}
 		req.Tools = tools
+	} else if p.searchModel != "" {
+		req.Tools = []toolDef{searchToolDef}
 	}
 	return req
 }
@@ -615,7 +622,7 @@ func runAgentLoop(ctx context.Context, req completionRequest, p params) error {
 	}
 
 	logger := newToolLogger(p.toolLog)
-	if err := runAgentTurn(ctx, &req, bash, p.pretty, logger); err != nil {
+	if err := runAgentTurn(ctx, &req, bash, p.pretty, logger, p.searchModel); err != nil {
 		return err
 	}
 	if err := saveCompletion(req); err != nil {
@@ -627,7 +634,7 @@ func runAgentLoop(ctx context.Context, req completionRequest, p params) error {
 // runAgentTurn runs one user turn: streams a response, executes any tool calls,
 // feeds results back, and repeats until the model stops calling tools.
 // req is updated in place with all new messages appended.
-func runAgentTurn(ctx context.Context, req *completionRequest, bash *bashRunner, pretty bool, logger *toolLogger) error {
+func runAgentTurn(ctx context.Context, req *completionRequest, bash *bashRunner, pretty bool, logger *toolLogger, searchModel string) error {
 	for {
 		var renderer *ttyRenderer
 		var buf strings.Builder
@@ -688,7 +695,7 @@ func runAgentTurn(ctx context.Context, req *completionRequest, bash *bashRunner,
 			id := logger.nextID()
 			logger.logCall(id, tc)
 			start := time.Now()
-			result, toolErr := executeTool(tc, bash)
+			result, toolErr := executeTool(tc, bash, searchModel)
 			dur := time.Since(start)
 			logger.logResult(id, tc, toolLogResult{Result: result, Err: toolErr, Duration: dur})
 			var content string
