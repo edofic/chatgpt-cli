@@ -13,6 +13,9 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/charmbracelet/glamour"
+	"golang.org/x/term"
 )
 
 const (
@@ -60,6 +63,7 @@ type params struct {
 	temperature     float64
 	continueSession bool
 	interactive     bool
+	pretty          bool
 	msg             string
 }
 
@@ -89,11 +93,25 @@ func main() {
 		req.Messages = append(req.Messages, message{Role: "user", Content: string(contents)})
 	}
 
+	isTTY := p.pretty
+	var renderer *ttyRenderer
+	var buf strings.Builder
+	if isTTY {
+		renderer = &ttyRenderer{}
+	}
+
 	fullResponse, citations, err := streamCompletion(ctx, req, func(chunk string) error {
+		if isTTY {
+			buf.WriteString(chunk)
+			renderer.render(buf.String())
+			return nil
+		}
 		_, err := fmt.Print(chunk)
 		return err
 	})
-	fmt.Println()
+	if !isTTY {
+		fmt.Println()
+	}
 	if err != nil {
 		panic(err)
 	}
@@ -103,6 +121,33 @@ func main() {
 	if err := saveCompletion(req); err != nil {
 		panic(err)
 	}
+}
+
+type ttyRenderer struct {
+	prev string
+}
+
+func (r *ttyRenderer) render(text string) {
+	rendered, err := glamour.Render(text, "dark")
+	if err != nil {
+		rendered = text
+	}
+
+	// Find which line the two outputs first diverge on
+	prevLines := strings.SplitAfter(r.prev, "\n")
+	newLines := strings.SplitAfter(rendered, "\n")
+	commonLines := 0
+	for commonLines < len(prevLines) && commonLines < len(newLines) && prevLines[commonLines] == newLines[commonLines] {
+		commonLines++
+	}
+
+	// Move cursor up past the lines that changed and clear from there
+	clearLines := len(prevLines) - commonLines
+	if clearLines > 0 {
+		fmt.Printf("\033[%dA\033[J", clearLines)
+	}
+	fmt.Print(strings.Join(newLines[commonLines:], ""))
+	r.prev = rendered
 }
 
 func printCitations(citations []citation) {
@@ -115,7 +160,7 @@ func printCitations(citations []citation) {
 	}
 }
 
-func printSession(req completionRequest) {
+func printSession(req completionRequest, pretty bool) {
 	for _, m := range req.Messages {
 		switch m.Role {
 		case "system":
@@ -123,7 +168,12 @@ func printSession(req completionRequest) {
 		case "user":
 			fmt.Printf("> %s\n", m.Content)
 		case "assistant":
-			fmt.Printf("%s\n", m.Content)
+			if pretty {
+				r := &ttyRenderer{}
+				r.render(m.Content)
+			} else {
+				fmt.Printf("%s\n", m.Content)
+			}
 		}
 	}
 }
@@ -132,7 +182,7 @@ func runInteractive(model string, p params) {
 	req := getCompletionRequest(p, model)
 
 	if p.continueSession {
-		printSession(req)
+		printSession(req, p.pretty)
 	}
 
 	scanner := bufio.NewScanner(os.Stdin)
@@ -149,13 +199,27 @@ func runInteractive(model string, p params) {
 
 		req.Messages = append(req.Messages, message{Role: "user", Content: line})
 
+		isTTY := p.pretty
+		var renderer *ttyRenderer
+		var buf strings.Builder
+		if isTTY {
+			renderer = &ttyRenderer{}
+		}
+
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		fullResponse, citations, err := streamCompletion(ctx, req, func(chunk string) error {
+			if isTTY {
+				buf.WriteString(chunk)
+				renderer.render(buf.String())
+				return nil
+			}
 			_, err := fmt.Print(chunk)
 			return err
 		})
 		cancel()
-		fmt.Println()
+		if !isTTY {
+			fmt.Println()
+		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			continue
@@ -176,6 +240,8 @@ func parseArgs() params {
 	flag.StringVar(&p.includeFile, "includeFile", "", "File to include with the prompt")
 	flag.Float64Var(&p.temperature, "temperature", 0, "Temperature")
 	flag.BoolVar(&p.continueSession, "c", false, "Continue last session (ignores other flags)")
+	isTTY := term.IsTerminal(int(os.Stdout.Fd()))
+	flag.BoolVar(&p.pretty, "pretty", isTTY, "Render markdown (default: true when stdout is a TTY)")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options] message\n", os.Args[0])
 		flag.PrintDefaults()
