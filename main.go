@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -137,20 +138,16 @@ func (r *ttyRenderer) render(text string) {
 		rendered = text
 	}
 
-	// Find which line the two outputs first diverge on
-	prevLines := strings.SplitAfter(r.prev, "\n")
-	newLines := strings.SplitAfter(rendered, "\n")
-	commonLines := 0
-	for commonLines < len(prevLines) && commonLines < len(newLines) && prevLines[commonLines] == newLines[commonLines] {
-		commonLines++
+	if r.prev != "" {
+		// Count lines printed previously; SplitAfter adds a trailing empty
+		// element for a trailing newline, so subtract 1 to get actual line count.
+		lines := strings.SplitAfter(r.prev, "\n")
+		moveUp := len(lines) - 1
+		if moveUp > 0 {
+			fmt.Printf("\033[%dA\033[J", moveUp)
+		}
 	}
-
-	// Move cursor up past the lines that changed and clear from there
-	clearLines := len(prevLines) - commonLines
-	if clearLines > 0 {
-		fmt.Printf("\033[%dA\033[J", clearLines)
-	}
-	fmt.Print(strings.Join(newLines[commonLines:], ""))
+	fmt.Print(rendered)
 	r.prev = rendered
 }
 
@@ -210,6 +207,7 @@ func runInteractive(model string, p params) {
 			continue
 		}
 
+		line = expandAtFiles(line)
 		req.Messages = append(req.Messages, message{Role: "user", Content: line})
 
 		isTTY := p.pretty
@@ -244,6 +242,23 @@ func runInteractive(model string, p params) {
 			fmt.Fprintf(os.Stderr, "warn: failed to save session: %v\n", err)
 		}
 	}
+}
+
+var atFileRe = regexp.MustCompile(`@(\S+)`)
+
+// expandAtFiles replaces @filename tokens with the contents of the named file,
+// wrapped in a fenced code block labeled with the filename.
+// Tokens that don't resolve to readable files are left unchanged.
+func expandAtFiles(line string) string {
+	return atFileRe.ReplaceAllStringFunc(line, func(match string) string {
+		path := match[1:] // strip leading @
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			return match
+		}
+		fmt.Fprintf(os.Stderr, "[including %s]\n", path)
+		return fmt.Sprintf("Contents of %s:\n```\n%s\n```", path, strings.TrimRight(string(contents), "\n"))
+	})
 }
 
 func parseArgs() params {
