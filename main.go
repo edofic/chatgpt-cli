@@ -2,23 +2,56 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"strings"
 	"time"
-
-	"github.com/sashabaranov/go-openai"
 )
 
 const (
-	defaultModel = "gpt-5.4-mini"
-	sessionFile  = "/tmp/chatgpt-cli-last-session.json"
+	defaultModel    = "gpt-5.4-mini"
+	defaultEndpoint = "https://api.openai.com/v1/chat/completions"
+	sessionFile     = "/tmp/chatgpt-cli-last-session.json"
 )
+
+type message struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type completionRequest struct {
+	Model               string    `json:"model"`
+	Messages            []message `json:"messages"`
+	MaxCompletionTokens int       `json:"max_completion_tokens,omitempty"`
+	Temperature         float32   `json:"temperature,omitempty"`
+	Stream              bool      `json:"stream"`
+}
+
+type citation struct {
+	RefID int    `json:"ref_id"`
+	Title string `json:"title"`
+	URL   string `json:"url"`
+}
+
+type deltaContent struct {
+	Content string `json:"content"`
+}
+
+type streamChoice struct {
+	Delta deltaContent `json:"delta"`
+}
+
+type streamChunk struct {
+	Choices   []streamChoice `json:"choices"`
+	Citations []citation     `json:"citations"`
+}
 
 type params struct {
 	maxTokens       int
@@ -33,14 +66,13 @@ type params struct {
 func main() {
 	p := parseArgs()
 
-	client := getClient()
 	model := os.Getenv("OPENAI_MODEL")
 	if model == "" {
 		model = defaultModel
 	}
 
 	if p.interactive {
-		runInteractive(client, model, p)
+		runInteractive(model, p)
 		return
 	}
 
@@ -48,9 +80,16 @@ func main() {
 	defer cancel()
 
 	req := getCompletionRequest(p, model)
-	req = appendMessages(req, p)
+	req.Messages = append(req.Messages, message{Role: "user", Content: p.msg})
+	if p.includeFile != "" {
+		contents, err := os.ReadFile(p.includeFile)
+		if err != nil {
+			panic(err)
+		}
+		req.Messages = append(req.Messages, message{Role: "user", Content: string(contents)})
+	}
 
-	fullResponse, err := streamCompletion(ctx, client, req, func(chunk string) error {
+	fullResponse, citations, err := streamCompletion(ctx, req, func(chunk string) error {
 		_, err := fmt.Print(chunk)
 		return err
 	})
@@ -58,29 +97,38 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	printCitations(citations)
 
-	req.Messages = append(req.Messages, openai.ChatCompletionMessage{Role: openai.ChatMessageRoleAssistant, Content: fullResponse})
-
-	err = saveCompletion(req)
-	if err != nil {
+	req.Messages = append(req.Messages, message{Role: "assistant", Content: fullResponse})
+	if err := saveCompletion(req); err != nil {
 		panic(err)
 	}
 }
 
-func printSession(req openai.ChatCompletionRequest) {
+func printCitations(citations []citation) {
+	if len(citations) == 0 {
+		return
+	}
+	fmt.Println("\nSources:")
+	for _, c := range citations {
+		fmt.Printf("  [%d] %s\n      %s\n", c.RefID, c.Title, c.URL)
+	}
+}
+
+func printSession(req completionRequest) {
 	for _, m := range req.Messages {
 		switch m.Role {
-		case openai.ChatMessageRoleSystem:
+		case "system":
 			fmt.Printf("[system] %s\n", m.Content)
-		case openai.ChatMessageRoleUser:
+		case "user":
 			fmt.Printf("> %s\n", m.Content)
-		case openai.ChatMessageRoleAssistant:
+		case "assistant":
 			fmt.Printf("%s\n", m.Content)
 		}
 	}
 }
 
-func runInteractive(client *openai.Client, model string, p params) {
+func runInteractive(model string, p params) {
 	req := getCompletionRequest(p, model)
 
 	if p.continueSession {
@@ -99,10 +147,10 @@ func runInteractive(client *openai.Client, model string, p params) {
 			continue
 		}
 
-		req.Messages = append(req.Messages, openai.ChatCompletionMessage{Role: openai.ChatMessageRoleUser, Content: line})
+		req.Messages = append(req.Messages, message{Role: "user", Content: line})
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		fullResponse, err := streamCompletion(ctx, client, req, func(chunk string) error {
+		fullResponse, citations, err := streamCompletion(ctx, req, func(chunk string) error {
 			_, err := fmt.Print(chunk)
 			return err
 		})
@@ -112,9 +160,9 @@ func runInteractive(client *openai.Client, model string, p params) {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			continue
 		}
+		printCitations(citations)
 
-		req.Messages = append(req.Messages, openai.ChatCompletionMessage{Role: openai.ChatMessageRoleAssistant, Content: fullResponse})
-
+		req.Messages = append(req.Messages, message{Role: "assistant", Content: fullResponse})
 		if err := saveCompletion(req); err != nil {
 			fmt.Fprintf(os.Stderr, "warn: failed to save session: %v\n", err)
 		}
@@ -122,12 +170,11 @@ func runInteractive(client *openai.Client, model string, p params) {
 }
 
 func parseArgs() params {
-	// var versions of flags from main, returning a params struct
 	var p params
 	flag.IntVar(&p.maxTokens, "maxTokens", 500, "Maximum number of tokens to generate")
 	flag.StringVar(&p.systemMsg, "systemMsg", "", "System message to include with the prompt")
 	flag.StringVar(&p.includeFile, "includeFile", "", "File to include with the prompt")
-	flag.Float64Var(&p.temperature, "temperature", 0, "ChatGPT temperature")
+	flag.Float64Var(&p.temperature, "temperature", 0, "Temperature")
 	flag.BoolVar(&p.continueSession, "c", false, "Continue last session (ignores other flags)")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options] message\n", os.Args[0])
@@ -148,29 +195,19 @@ func parseArgs() params {
 	return p
 }
 
-func getClient() *openai.Client {
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	if endpoint := os.Getenv("OPENAI_ENDPOINT"); endpoint != "" {
-		config := openai.DefaultConfig(apiKey)
-		config.BaseURL = endpoint
-		return openai.NewClientWithConfig(config)
+func endpoint() string {
+	ep := os.Getenv("OPENAI_ENDPOINT")
+	if ep == "" {
+		return defaultEndpoint
 	}
-	url := os.Getenv("OPENAI_AZURE_ENDPOINT")
-	if url != "" {
-		deployment := os.Getenv("OPENAI_AZURE_MODEL")
-		config := openai.DefaultAzureConfig(apiKey, url)
-		config.AzureModelMapperFunc = func(model string) string {
-			if deployment != "" {
-				return deployment
-			}
-			return model
-		}
-		return openai.NewClientWithConfig(config)
-	}
-	return openai.NewClient(apiKey)
+	return strings.TrimRight(ep, "/") + "/chat/completions"
 }
 
-func getCompletionRequest(p params, model string) openai.ChatCompletionRequest {
+func apiKey() string {
+	return os.Getenv("OPENAI_API_KEY")
+}
+
+func getCompletionRequest(p params, model string) completionRequest {
 	if p.continueSession {
 		req := loadLastCompletion()
 		if req != nil {
@@ -181,33 +218,32 @@ func getCompletionRequest(p params, model string) openai.ChatCompletionRequest {
 	return newCompletionRequest(p, model)
 }
 
-func loadLastCompletion() *openai.ChatCompletionRequest {
-	var req openai.ChatCompletionRequest
+func loadLastCompletion() *completionRequest {
+	var req completionRequest
 	session, err := os.ReadFile(sessionFile)
 	if err != nil {
 		return nil
 	}
-	err = json.Unmarshal(session, &req)
-	if err != nil {
+	if err := json.Unmarshal(session, &req); err != nil {
 		return nil
 	}
 	return &req
 }
 
-func saveCompletion(req openai.ChatCompletionRequest) error {
-	resJson, err := json.Marshal(req)
+func saveCompletion(req completionRequest) error {
+	data, err := json.Marshal(req)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(sessionFile, resJson, 0o644)
+	return os.WriteFile(sessionFile, data, 0o644)
 }
 
-func newCompletionRequest(p params, model string) openai.ChatCompletionRequest {
-	msgs := []openai.ChatCompletionMessage{}
+func newCompletionRequest(p params, model string) completionRequest {
+	var msgs []message
 	if p.systemMsg != "" {
-		msgs = append(msgs, openai.ChatCompletionMessage{Role: openai.ChatMessageRoleSystem, Content: p.systemMsg})
+		msgs = append(msgs, message{Role: "system", Content: p.systemMsg})
 	}
-	return openai.ChatCompletionRequest{
+	return completionRequest{
 		Model:               model,
 		MaxCompletionTokens: p.maxTokens,
 		Temperature:         float32(p.temperature),
@@ -216,45 +252,65 @@ func newCompletionRequest(p params, model string) openai.ChatCompletionRequest {
 	}
 }
 
-func appendMessages(req openai.ChatCompletionRequest, p params) openai.ChatCompletionRequest {
-	req.Messages = append(req.Messages, openai.ChatCompletionMessage{Role: openai.ChatMessageRoleUser, Content: p.msg})
-	if p.includeFile != "" {
-		contents, err := os.ReadFile(p.includeFile)
-		if err != nil {
-			panic(err)
-		}
-		req.Messages = append(
-			req.Messages,
-			openai.ChatCompletionMessage{Role: openai.ChatMessageRoleUser, Content: string(contents)},
-		)
-	}
-	return req
-}
-
-func streamCompletion(ctx context.Context, client *openai.Client, req openai.ChatCompletionRequest, callback func(chunk string) error) (fullResponse string, err error) {
-	stream, err := client.CreateChatCompletionStream(ctx, req)
+func streamCompletion(ctx context.Context, req completionRequest, callback func(chunk string) error) (fullResponse string, citations []citation, err error) {
+	body, err := json.Marshal(req)
 	if err != nil {
-		return "", fmt.Errorf("ChatCompletionStream error: %v\n", err)
+		return "", nil, err
 	}
-	defer stream.Close()
 
-	responseChunks := []string{}
-	for {
-		response, err := stream.Recv()
-		if errors.Is(err, io.EOF) {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint(), bytes.NewReader(body))
+	if err != nil {
+		return "", nil, err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+apiKey())
+	httpReq.Header.Set("Accept", "text/event-stream")
+
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		return "", nil, fmt.Errorf("request error: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		errBody, _ := io.ReadAll(resp.Body)
+		return "", nil, fmt.Errorf("API error %d: %s", resp.StatusCode, errBody)
+	}
+
+	var chunks []string
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		data := strings.TrimPrefix(line, "data: ")
+		if data == "[DONE]" {
 			break
 		}
 
-		if err != nil {
-			return "", fmt.Errorf("stream error: %v\n", err)
+		var sc streamChunk
+		if err := json.Unmarshal([]byte(data), &sc); err != nil {
+			continue
 		}
-
-		chunk := response.Choices[0].Delta.Content
-		err = callback(chunk)
-		if err != nil {
-			return "", fmt.Errorf("callback error: %v\n", err)
+		if len(sc.Citations) > 0 {
+			citations = sc.Citations
 		}
-		responseChunks = append(responseChunks, chunk)
+		if len(sc.Choices) == 0 {
+			continue
+		}
+		chunk := sc.Choices[0].Delta.Content
+		if chunk == "" {
+			continue
+		}
+		if err := callback(chunk); err != nil {
+			return "", nil, fmt.Errorf("callback error: %w", err)
+		}
+		chunks = append(chunks, chunk)
 	}
-	return strings.Join(responseChunks, ""), nil
+	if err := scanner.Err(); err != nil && !errors.Is(err, io.EOF) {
+		return "", nil, fmt.Errorf("stream error: %w", err)
+	}
+
+	return strings.Join(chunks, ""), citations, nil
 }
