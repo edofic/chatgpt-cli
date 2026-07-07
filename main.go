@@ -58,6 +58,7 @@ type streamChunk struct {
 
 type params struct {
 	maxTokens       int
+	model           string
 	systemMsg       string
 	includeFile     string
 	temperature     float64
@@ -70,7 +71,10 @@ type params struct {
 func main() {
 	p := parseArgs()
 
-	model := os.Getenv("OPENAI_MODEL")
+	model := p.model
+	if model == "" {
+		model = os.Getenv("OPENAI_MODEL")
+	}
 	if model == "" {
 		model = defaultModel
 	}
@@ -236,6 +240,7 @@ func runInteractive(model string, p params) {
 func parseArgs() params {
 	var p params
 	flag.IntVar(&p.maxTokens, "maxTokens", 500, "Maximum number of tokens to generate")
+	flag.StringVar(&p.model, "model", "", "Model to use (overrides OPENAI_MODEL env var)")
 	flag.StringVar(&p.systemMsg, "systemMsg", "", "System message to include with the prompt")
 	flag.StringVar(&p.includeFile, "includeFile", "", "File to include with the prompt")
 	flag.Float64Var(&p.temperature, "temperature", 0, "Temperature")
