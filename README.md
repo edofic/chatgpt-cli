@@ -4,9 +4,7 @@
 
 This is a command line client for using LLMs over OpenAI-compatible APIs. You can easily ask questions (responses are streamed in real time), tweak system prompt (or other params), include local files, pipe the response and ask follow up questions. 
 
-
-https://user-images.githubusercontent.com/597476/230737546-d9465089-d323-45a5-87d7-84901d8054c7.mov
-
+https://github.com/user-attachments/assets/89777daa-6774-4016-a595-f654c4ae2a56
 
 ## Installation
 
