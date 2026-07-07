@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/glamour"
+	"github.com/chzyer/readline"
 	"golang.org/x/term"
 )
 
@@ -239,14 +240,23 @@ func runInteractive(model string, p params) {
 		}
 	}
 
-	scanner := bufio.NewScanner(os.Stdin)
+	rl, err := readline.New("\033[36m❯\033[0m ")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return
+	}
+	defer rl.Close()
+
 	for {
-		fmt.Print("> ")
-		if !scanner.Scan() {
+		line, err := rl.Readline()
+		if err != nil {
+			if err != readline.ErrInterrupt && err != io.EOF {
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			}
 			fmt.Println()
 			break
 		}
-		line := strings.TrimSpace(scanner.Text())
+		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
