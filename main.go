@@ -297,7 +297,7 @@ func runInteractive(model string, p params) {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return
 	}
-	defer rl.Close()
+	defer rl.Close() //nolint:errcheck
 
 	for {
 		line, err := rl.Readline()
@@ -421,10 +421,11 @@ bash access. Drop a fence.jsonc in your project directory to customise the sandb
 		p.toolLog = toolLogNormal
 	}
 	msg := strings.TrimSpace(strings.Join(flag.Args(), " "))
-	if msg == "" {
+	switch msg {
+	case "":
 		p.interactive = true
 		return p
-	} else if msg == "-" {
+	case "-":
 		msg = ""
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
@@ -525,7 +526,7 @@ func streamCompletion(ctx context.Context, req completionRequest, callback func(
 	if err != nil {
 		return "", nil, nil, "", fmt.Errorf("request error: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		errBody, _ := io.ReadAll(resp.Body)

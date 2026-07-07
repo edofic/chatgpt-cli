@@ -626,18 +626,6 @@ func codeBlock(s string, color bool) []string {
 	return out
 }
 
-func indent(s string) []string {
-	if s == "" {
-		return []string{"  <empty>"}
-	}
-	parts := strings.Split(strings.TrimRight(s, "\n"), "\n")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		out = append(out, "  "+p)
-	}
-	return out
-}
-
 func printJSONL(v any) {
 	b, err := json.Marshal(v)
 	if err != nil {
