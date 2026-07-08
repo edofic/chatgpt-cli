@@ -487,9 +487,14 @@ func saveCompletion(req completionRequest) error {
 
 func newCompletionRequest(p params, model string) completionRequest {
 	var msgs []message
-	if p.systemMsg != "" {
-		msgs = append(msgs, message{Role: "system", Content: p.systemMsg})
+	systemMsg := p.systemMsg
+	dateNote := "Today's date is " + time.Now().Format("2006-01-02") + "."
+	if systemMsg != "" {
+		systemMsg += "\n" + dateNote
+	} else {
+		systemMsg = dateNote
 	}
+	msgs = append(msgs, message{Role: "system", Content: systemMsg})
 	req := completionRequest{
 		Model:               model,
 		MaxCompletionTokens: p.maxTokens,
